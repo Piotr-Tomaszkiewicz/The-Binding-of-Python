@@ -1,0 +1,30 @@
+Metadata-Version: 2.1
+Name: pygame-button
+Version: 0.0.3
+Summary: A very simple button class for pygame.
+Home-page: https://github.com/Layerex/pygame_button
+Author: Layerex
+Author-email: layerex@dismail.de
+Classifier: Development Status :: 7 - Inactive
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Software Development :: Libraries :: pygame
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 3
+Description-Content-Type: text/markdown
+Requires-Dist: pygame
+
+# pygame_button
+A very simple button class for pygame.
+Supports different background and font colors for idle, hover, and clicked modes. Can be linked to a function and set to either run on down-click, or click release.
+
+It is stylable to a degree (see example). The easiest way to do this is to create a style dictionary and then pass this with the **kwarg unpacking syntax.
+
+Many things that could still be added.
+
+## Installation
+``` sh
+pip install pygame_button
+```
+
+## Usage
+See [example](https://github.com/Layerex/pygame_button/blob/master/example/example.py)
