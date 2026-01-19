@@ -5,13 +5,13 @@ ENEMY_TYPES = {
         "hp": 100,
         "speed": 0,
         "flying": False,
-        "behavior": "idle", # Typ zachowania
+        "behavior": "idle",
         "color": (255, 100, 100)
     },
-    "S1": { # Przykład na przyszłość
+    "C1": {
         "name": "Chaser",
-        "hp": 20,
-        "speed": 2,
+        "hp": 30,
+        "speed": 2.5,
         "flying": False,
         "behavior": "chase",
         "color": (200, 0, 0)
