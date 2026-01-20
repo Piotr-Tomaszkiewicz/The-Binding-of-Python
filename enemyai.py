@@ -4,92 +4,64 @@ import pygame
 import heapq
 
 def get_grid_pos(px, py):
-    OFFSET_X = (1280 - 16 * 40) // 2
-    OFFSET_Y = (720 - 16 * 40) // 2
-    gx = int((px - OFFSET_X) // 40)
-    gy = int((py - OFFSET_Y) // 40)
-    return gx, gy
+    off_x, off_y = (1280-640)//2, (720-640)//2
+    return int((px - off_x) // 40), int((py - off_y) // 40)
+
+def h(a, b): return abs(a[0]-b[0]) + abs(a[1]-b[1])
 
 def a_star(start, goal, layout):
-    def heuristic(a, b):
-        return abs(a[0] - b[0]) + abs(a[1] - b[1])
-
-    neighbors = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-    close_set = set()
-    came_from = {}
-    gscore = {start: 0}
-    fscore = {start: heuristic(start, goal)}
+    neighbors = [(0,1),(0,-1),(1,0),(-1,0)]
+    close_set = set(); came_from = {}; gscore = {start:0}; fscore = {start:h(start,goal)}
     oheap = [(fscore[start], start)]
-
     while oheap:
         current = heapq.heappop(oheap)[1]
         if current == goal:
-            path = []
-            while current in came_from:
-                path.append(current)
-                current = came_from[current]
-            return path[::-1]
-
+            p = []
+            while current in came_from: p.append(current); current = came_from[current]
+            return p[::-1]
         close_set.add(current)
         for i, j in neighbors:
-            neighbor = current[0] + i, current[1] + j
-            if 0 <= neighbor[0] < 16 and 0 <= neighbor[1] < 16:
-                if layout[neighbor[1]][neighbor[0]] == 1: continue
-            else: continue
-            if neighbor in close_set: continue
-            tentative_g_score = gscore[current] + 1
-            if neighbor not in gscore or tentative_g_score < gscore[neighbor]:
-                came_from[neighbor] = current
-                gscore[neighbor] = tentative_g_score
-                fscore[neighbor] = tentative_g_score + heuristic(neighbor, goal)
-                heapq.heappush(oheap, (fscore[neighbor], neighbor))
+            nb = current[0]+i, current[1]+j
+            if 0<=nb[0]<16 and 0<=nb[1]<16 and layout[nb[1]][nb[0]]!=1 and nb not in close_set:
+                tg = gscore[current]+1
+                if nb not in gscore or tg < gscore[nb]:
+                    came_from[nb]=current; gscore[nb]=tg; fscore[nb]=tg+h(nb,goal)
+                    heapq.heappush(oheap, (fscore[nb], nb))
     return []
 
-def check_enemy_collisions(enemy, next_rect, all_enemies):
-    """Sprawdza, czy nowy prostokąt przeciwnika koliduje z innymi przeciwnikami."""
-    for other in all_enemies:
-        if other is not enemy: # Nie sprawdzaj kolizji ze samym sobą
-            if next_rect.colliderect(other.rect):
-                return True
-    return False
-
 def update_enemy_behavior(enemy, player_pos, layout, all_enemies):
-    if enemy.behavior_type == "idle":
-        pass
-
-    elif enemy.behavior_type == "chase":
+    if enemy.behavior_type == "idle": return
+    
+    # Logika dla latających - ignorują A* i przeszkody
+    if enemy.flying:
+        target_px, target_py = player_pos[0]+5, player_pos[1]+5
+    else:
+        # Logika dla chodzących - używają A*
         start = get_grid_pos(enemy.rect.centerx, enemy.rect.centery)
-        goal = get_grid_pos(player_pos[0] + 15, player_pos[1] + 15)
-
-        if start == goal:
+        goal = get_grid_pos(player_pos[0]+15, player_pos[1]+15)
+        path = a_star(start, goal, layout)
+        if not path: 
             target_px, target_py = player_pos[0], player_pos[1]
         else:
-            path = a_star(start, goal, layout)
-            if not path: return
-            next_tile = path[0]
-            OFFSET_X = (1280 - 16 * 40) // 2
-            OFFSET_Y = (720 - 16 * 40) // 2
-            target_px = OFFSET_X + next_tile[0] * 40 + 5
-            target_py = OFFSET_Y + next_tile[1] * 40 + 5
+            off_x, off_y = (1280-640)//2, (720-640)//2
+            target_px = off_x + path[0][0]*40 + (40-enemy.rect.width)//2
+            target_py = off_y + path[0][1]*40 + (40-enemy.rect.height)//2
 
-        dx = target_px - enemy.rect.x
-        dy = target_py - enemy.rect.y
-        dist = math.hypot(dx, dy)
-
-        if dist > 0:
-            vx = (dx / dist) * enemy.speed
-            vy = (dy / dist) * enemy.speed
-
-            # Ruch X z kolizją
-            new_rect_x = enemy.rect.move(vx, 0)
-            if not check_enemy_collisions(enemy, new_rect_x, all_enemies):
-                # Tutaj można by też dodać check_tile_collision jeśli chcemy być pewni
-                enemy.rect.x += vx
+    dx, dy = target_px - enemy.rect.x, target_py - enemy.rect.y
+    dist = math.hypot(dx, dy)
+    
+    if dist > 0:
+        vx, vy = (dx/dist)*enemy.speed, (dy/dist)*enemy.speed
+        
+        # Ruch X
+        nx = enemy.rect.move(vx, 0)
+        # Przeciwnik blokuje się na innych tylko jeśli nie jest latający (lub latający na latających - tu uproszczone: zawsze check)
+        if not any(other != enemy and nx.colliderect(other.rect) for other in all_enemies):
+            enemy.rect.x += vx
             
-            # Ruch Y z kolizją
-            new_rect_y = enemy.rect.move(0, vy)
-            if not check_enemy_collisions(enemy, new_rect_y, all_enemies):
-                enemy.rect.y += vy
+        # Ruch Y
+        ny = enemy.rect.move(0, vy)
+        if not any(other != enemy and ny.colliderect(other.rect) for other in all_enemies):
+            enemy.rect.y += vy
 
-def handle_death(enemy):
-    return enemy.hp <= 0
+def handle_death(enemy): return enemy.hp <= 0
