@@ -42,11 +42,9 @@ player_inv_timer = 0
 
 class Pickup:
     def __init__(self, x, y, p_type="heart"):
-        self.x = x
-        self.y = y
+        self.x, self.y = x, y
         self.type = p_type
         self.radius = 8
-
     def draw(self, surface):
         if self.type == "heart":
             pygame.draw.circle(surface, WHITE, (self.x, self.y), self.radius + 2)
@@ -61,13 +59,11 @@ class Projectile:
         self.traveled = 0
         self.max_range_px = max_range * TILE_SIZE
         self.active = True
-
     def update(self):
         mx, my = self.dir[0] * self.speed, self.dir[1] * self.speed
         self.x += mx; self.y += my
         self.traveled += math.hypot(mx, my)
         if self.traveled > self.max_range_px: self.active = False
-
     def draw(self, surface):
         cx, cy = self.x, self.y
         if self.dir == (0, -1): pts = [(cx, cy-10), (cx-7, cy+5), (cx+7, cy+5)]
@@ -134,8 +130,7 @@ def draw_ui():
     for i in range(player_max_hp):
         pos = (40 + i * 35, 40)
         pygame.draw.circle(screen, WHITE, pos, 14, 2)
-        color = RED if i < player_hp else BLACK
-        pygame.draw.circle(screen, color, pos, 12)
+        pygame.draw.circle(screen, RED if i < player_hp else BLACK, pos, 12)
     stats = [f"DMG: {player_dmg}", f"FR: {player_fr}", f"RANGE: {player_range}", f"SPEED: {player_speed_tiles}"]
     for i, txt in enumerate(stats): screen.blit(stats_font.render(txt, True, WHITE), (25, 80 + i * 30))
 
@@ -176,8 +171,7 @@ btn_quit = pygame.Rect(SCREEN_WIDTH//2-120, SCREEN_HEIGHT//2+20, 240, 60)
 def start_new_game():
     global scene, game_map, current_room, player_x, player_y, player_hp, player_bullets, player_inv_timer
     global player_max_hp, player_dmg, player_speed_tiles, player_range
-    game_map = generate_map()
-    current_room = [4, 4]
+    game_map = generate_map(); current_room = [4, 4]
     player_x, player_y = SCREEN_WIDTH//2-15, SCREEN_HEIGHT//2-15
     player_hp = 3; player_max_hp = 3; player_dmg = 5; player_speed_tiles = 6.0; player_range = 6.0
     player_inv_timer = 0; player_bullets = []; scene = 1
@@ -202,13 +196,8 @@ while running:
         locked = len(room["enemies"]) > 0
         if player_inv_timer > 0: player_inv_timer -= 1
 
-        # SUPER MODE ACTIVATION (G + O + D)
         if keys[pygame.K_g] and keys[pygame.K_o] and keys[pygame.K_d]:
-            player_max_hp = 10
-            player_hp = 10
-            player_dmg = 50
-            player_speed_tiles = 12.0 # Podwojony speed (domyślny był 6)
-            player_range = 16.0
+            player_max_hp = 10; player_hp = 10; player_dmg = 50; player_speed_tiles = 12.0; player_range = 16.0
 
         dx, dy = 0, 0
         if keys[pygame.K_w]: dy -= speed
@@ -217,7 +206,6 @@ while running:
         if keys[pygame.K_d]: dx += speed
         p_rect = pygame.Rect(player_x, player_y, player_size, player_size)
         
-        # Ruch i Drzwi
         new_x_rect = pygame.Rect(player_x + dx, player_y, player_size, player_size)
         if not check_tile_collision(new_x_rect, room["layout"]):
             if ROOM_OFFSET_X <= new_x_rect.x <= ROOM_OFFSET_X + 640 - player_size: player_x += dx
@@ -235,7 +223,6 @@ while running:
                 elif new_y_rect.y > ROOM_OFFSET_Y+640-player_size and (current_room[0], current_room[1]+1) in game_map:
                     current_room[1]+=1; player_y=ROOM_OFFSET_Y; player_bullets=[]; room["enemy_bullets"]=[]
 
-        # Strzelanie
         now = pygame.time.get_ticks(); s_dir = None
         if keys[pygame.K_UP]: s_dir = (0, -1)
         elif keys[pygame.K_DOWN]: s_dir = (0, 1)
@@ -244,7 +231,6 @@ while running:
         if s_dir and now - last_shot_time > 1000 / player_fr:
             player_bullets.append(Projectile(player_x+15, player_y+15, s_dir, player_dmg, player_range)); last_shot_time = now
 
-        # Pociski Gracza
         for b in player_bullets[:]:
             b.update()
             if not (ROOM_OFFSET_X < b.x < ROOM_OFFSET_X+640 and ROOM_OFFSET_Y < b.y < ROOM_OFFSET_Y+640): b.active=False
@@ -254,7 +240,6 @@ while running:
                 if e.rect.collidepoint(b.x, b.y): e.hp-=b.dmg; b.active=False
             if not b.active: player_bullets.remove(b)
 
-        # Pociski Wrogów
         for eb in room["enemy_bullets"][:]:
             eb.update()
             if not (ROOM_OFFSET_X < eb.x < ROOM_OFFSET_X+640 and ROOM_OFFSET_Y < eb.y < ROOM_OFFSET_Y+640): eb.active=False
@@ -265,37 +250,27 @@ while running:
                 eb.active = False
             if not eb.active: room["enemy_bullets"].remove(eb)
 
-        # Znajdźki (Pickups)
         for p in room["pickups"][:]:
-            dist = math.hypot(p.x - p_rect.centerx, p.y - p_rect.centery)
-            if dist < 25: 
-                # Podnoszenie możliwe TYLKO gdy życie < max życie
-                if player_hp < player_max_hp:
-                    player_hp += 1
-                    room["pickups"].remove(p)
+            if math.hypot(p.x - p_rect.centerx, p.y - p_rect.centery) < 25:
+                if player_hp < player_max_hp: player_hp += 1; room["pickups"].remove(p)
 
-        # Eksplozje
         for ex in room["explosions"][:]:
             if ex.update(p_rect, room["enemies"]) and player_inv_timer == 0:
                 player_hp -= 1; player_inv_timer = 60
             if not ex.active: room["explosions"].remove(ex)
 
-        # AI i kolizje z wrogami
         for e in room["enemies"]:
             update_enemy_behavior(e, (player_x, player_y), room["layout"], room["enemies"], room["enemy_bullets"])
             if player_inv_timer == 0 and p_rect.colliderect(e.rect):
                 player_hp -= 1; player_inv_timer = 60
         
-        # Śmierć wrogów i Drop
-        for e in room["enemies"][:]:
-            if handle_death(e, room["explosions"]):
-                if random.random() < 0.05:
-                    room["pickups"].append(Pickup(e.rect.centerx, e.rect.centery, "heart"))
-                room["enemies"].remove(e)
+        room["enemies"] = [e for e in room["enemies"] if not handle_death(e, room["explosions"])]
+        for e in room["enemies"]:
+            if handle_death(e, room["explosions"]): # Double check for explosion trigger
+                 if random.random() < 0.05: room["pickups"].append(Pickup(e.rect.centerx, e.rect.centery, "heart"))
 
         if player_hp <= 0: scene = 0
 
-        # RYSOWANIE
         screen.fill(BLACK); draw_room(room)
         for p in room["pickups"]: p.draw(screen)
         for b in player_bullets: b.draw(screen)

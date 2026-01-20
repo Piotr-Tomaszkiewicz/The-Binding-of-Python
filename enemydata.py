@@ -18,6 +18,10 @@ ENEMY_TYPES = {
     },
     "T1": {
         "name": "Turret", "hp": 19, "speed": 0, "flying": False, "size": 32,
-        "behavior": "turret", "color": (255, 105, 180) # Różowy
+        "behavior": "turret", "color": (255, 105, 180)
+    },
+    "T2": {
+        "name": "Burster", "hp": 14, "speed": 0, "flying": False, "size": 32,
+        "behavior": "burst_turret", "color": (148, 0, 211) # Fioletowy
     }
 }

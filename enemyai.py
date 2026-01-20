@@ -36,7 +36,7 @@ class Explosion:
 class EnemyProjectile:
     def __init__(self, x, y, target_x, target_y, max_range):
         self.x, self.y = x, y
-        self.speed = 5.0
+        self.speed = 5.5
         angle = math.atan2(target_y - y, target_x - x)
         self.vx = math.cos(angle) * self.speed
         self.vy = math.sin(angle) * self.speed
@@ -53,19 +53,26 @@ class EnemyProjectile:
             self.active = False
 
     def draw(self, surface):
-        # Trójkąt skierowany w stronę lotu
-        # Obliczamy wierzchołki trójkąta na podstawie kąta
         rad = math.radians(self.angle)
-        p1 = (self.x + math.cos(rad)*12, self.y + math.sin(rad)*12)
-        p2 = (self.x + math.cos(rad + 2.5)*8, self.y + math.sin(rad + 2.5)*8)
-        p3 = (self.x + math.cos(rad - 2.5)*8, self.y + math.sin(rad - 2.5)*8)
-        
+        p1 = (self.x + math.cos(rad)*14, self.y + math.sin(rad)*14)
+        p2 = (self.x + math.cos(rad + 2.6)*9, self.y + math.sin(rad + 2.6)*9)
+        p3 = (self.x + math.cos(rad - 2.6)*9, self.y + math.sin(rad - 2.6)*9)
         pygame.draw.polygon(surface, (255, 255, 255), [p1, p2, p3])
-        pygame.draw.polygon(surface, (255, 0, 0), [p1, p2, p3], 2) # Czerwona obwódka
+        pygame.draw.polygon(surface, (255, 0, 0), [p1, p2, p3], 2)
 
 def get_grid_pos(px, py):
     off_x, off_y = (1280-640)//2, (720-640)//2
     return int((px - off_x) // 40), int((py - off_y) // 40)
+
+def check_enemy_tile_collision(rect, layout, flying):
+    if flying: return False
+    off_x, off_y = (1280-640)//2, (720-640)//2
+    for y in range(16):
+        for x in range(16):
+            if layout[y][x] == 1:
+                tile_rect = pygame.Rect(off_x + x*40, off_y + y*40, 40, 40)
+                if rect.colliderect(tile_rect): return True
+    return False
 
 def h(a, b): return abs(a[0]-b[0]) + abs(a[1]-b[1])
 
@@ -91,16 +98,34 @@ def a_star(start, goal, layout):
 
 def update_enemy_behavior(enemy, player_pos, layout, all_enemies, enemy_bullets):
     now = pygame.time.get_ticks()
-    
     if enemy.behavior_type == "idle": return
-
+    
     elif enemy.behavior_type == "turret":
-        # Strzela co 1000ms (1 sekunda)
         if now - enemy.last_shot > 1000:
-            bullet = EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, player_pos[0]+15, player_pos[1]+15, 10)
-            enemy_bullets.append(bullet)
+            enemy_bullets.append(EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, player_pos[0]+15, player_pos[1]+15, 10))
             enemy.last_shot = now
-        return
+            
+    elif enemy.behavior_type == "burst_turret":
+        if now - enemy.last_shot > 2000: # Co 2 sekundy
+            # 1. Ruch (skok o 2 kafelki = 80px)
+            dx = (player_pos[0]+15) - enemy.rect.centerx
+            dy = (player_pos[1]+15) - enemy.rect.centery
+            dist = math.hypot(dx, dy)
+            if dist > 0:
+                vx, vy = (dx/dist)*80, (dy/dist)*80
+                new_rect = enemy.rect.move(vx, vy)
+                if not check_enemy_tile_collision(new_rect, layout, enemy.flying):
+                    enemy.rect.move_ip(vx, vy)
+            
+            # 2. Strzał w 8 stron
+            angles = [0, 45, 90, 135, 180, 225, 270, 315]
+            for a in angles:
+                rad = math.radians(a)
+                tx = enemy.rect.centerx + math.cos(rad)*100
+                ty = enemy.rect.centery + math.sin(rad)*100
+                enemy_bullets.append(EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, tx, ty, 10))
+            
+            enemy.last_shot = now
 
     elif enemy.behavior_type == "chase":
         if enemy.flying: target_px, target_py = player_pos[0], player_pos[1]
