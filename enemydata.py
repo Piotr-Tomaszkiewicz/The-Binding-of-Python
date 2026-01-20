@@ -10,10 +10,14 @@ ENEMY_TYPES = {
     },
     "C2": {
         "name": "Chaser 2", "hp": 26, "speed": 1.1, "flying": False, "size": 35,
-        "behavior": "chase", "death_type": "explode", "color": (0, 100, 0) # Ciemnozielony
+        "behavior": "chase", "death_type": "explode", "color": (0, 100, 0)
     },
     "F1": {
         "name": "Flyer", "hp": 9, "speed": 1.76, "flying": True, "size": 20,
         "behavior": "chase", "color": (0, 0, 128)
+    },
+    "T1": {
+        "name": "Turret", "hp": 19, "speed": 0, "flying": False, "size": 32,
+        "behavior": "turret", "color": (255, 105, 180) # Różowy
     }
 }
