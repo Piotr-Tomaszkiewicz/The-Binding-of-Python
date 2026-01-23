@@ -1,4 +1,7 @@
 # The-Binding-of-Python
+Sterowanie:
+chodzenie - wsad
+strzelanie - strzałki
 
 Kody:
 g+o+d - super statystyki

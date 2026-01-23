@@ -7,17 +7,20 @@ ENEMY_TYPES = {
     "T1": {"name": "Turret", "hp": 19, "speed": 0, "flying": False, "size": 32, "behavior": "turret", "color": (255, 105, 180)},
     "T2": {"name": "Burster", "hp": 14, "speed": 0, "flying": False, "size": 32, "behavior": "burst_turret", "color": (148, 0, 211)},
     
-    # BOSS B1 (Kolor łososiowy: 250, 128, 114)
-    "B1": {
-        "name": "Boss B1", "hp": 120, "speed": 2.25, "flying": False, "size": 60, 
-        "behavior": "bounce", "split_to": "B1a", "color": (250, 128, 114)
+    # BOSS B1 (Bounce)
+    "B1": {"name": "Boss B1", "hp": 120, "speed": 2.25, "flying": False, "size": 60, "behavior": "bounce", "split_to": "B1a", "color": (250, 128, 114)},
+    "B1a": {"name": "B1 Mini", "hp": 60, "speed": 3.375, "flying": False, "size": 40, "behavior": "bounce", "split_to": "B1b", "color": (250, 128, 114)},
+    "B1b": {"name": "B1 Tiny", "hp": 30, "speed": 4.5, "flying": False, "size": 25, "behavior": "bounce", "split_to": None, "color": (250, 128, 114)},
+
+    # BOSS B2 (Bullet Hell)
+    "B2": {
+        "name": "Bullet Hell Boss", "hp": 200, "speed": 0, "flying": True, "size": 80, 
+        "behavior": "bullet_hell", "color": (50, 50, 50) 
     },
-    "B1a": {
-        "name": "B1 Mini", "hp": 60, "speed": 3.375, "flying": False, "size": 40, 
-        "behavior": "bounce", "split_to": "B1b", "color": (250, 128, 114)
-    },
-    "B1b": {
-        "name": "B1 Tiny", "hp": 30, "speed": 4.5, "flying": False, "size": 25, 
-        "behavior": "bounce", "split_to": None, "color": (250, 128, 114)
+    
+    # BOSS B3 (Charger)
+    "B3": {
+        "name": "Charger Boss", "hp": 250, "speed": 6.0, "flying": False, "size": 70, 
+        "behavior": "charger", "color": (100, 150, 50) 
     }
 }

@@ -50,7 +50,8 @@ class EnemyProjectile:
         self.x += self.vx
         self.y += self.vy
         self.traveled += self.speed
-        if self.traveled > self.max_range_px: self.active = False
+        if self.traveled > self.max_range_px:
+            self.active = False
 
     def draw(self, surface):
         rad = math.radians(self.angle)
@@ -97,32 +98,94 @@ def a_star(start, goal, layout):
 
 def update_enemy_behavior(enemy, player_pos, layout, all_enemies, enemy_bullets):
     now = pygame.time.get_ticks()
+    off_x, off_y = (1280-640)//2, (720-640)//2
     
     if enemy.behavior_type == "bounce":
-        # Inicjalizacja kierunku jeśli nie istnieje
-        if not hasattr(enemy, 'vx'):
-            angle = random.uniform(0, 2 * math.pi)
-            enemy.vx = math.cos(angle) * enemy.speed
-            enemy.vy = math.sin(angle) * enemy.speed
-
-        # Próba ruchu
-        new_rect = enemy.rect.move(enemy.vx, enemy.vy)
+        # Wymaga, aby vx/vy zostały zainicjalizowane w main.py
         
-        # Odbijanie od ścian pokoju (640x640 wewnątrz offsetu)
-        off_x, off_y = (1280-640)//2, (720-640)//2
-        if new_rect.left < off_x or new_rect.right > off_x + 640:
+        # Odbijanie od ścian i kamieni (z prostym odbiciem)
+        if enemy.rect.left + enemy.vx < off_x or enemy.rect.right + enemy.vx > off_x + 640 or check_enemy_tile_collision(enemy.rect.move(enemy.vx, 0), layout):
             enemy.vx *= -1
-        if new_rect.top < off_y or new_rect.bottom > off_y + 640:
+        if enemy.rect.top + enemy.vy < off_y or enemy.rect.bottom + enemy.vy > off_y + 640 or check_enemy_tile_collision(enemy.rect.move(0, enemy.vy), layout):
             enemy.vy *= -1
-            
-        # Odbijanie od kamieni
-        if check_enemy_tile_collision(new_rect, layout):
-            # Proste odbicie przy kolizji z kafelkiem
-            enemy.vx *= -1
-            enemy.vy *= -1
-
+        
         enemy.rect.x += enemy.vx
         enemy.rect.y += enemy.vy
+
+    elif enemy.behavior_type == "bullet_hell":
+        if not hasattr(enemy, 'shoot_mode'):
+            enemy.shoot_mode = 0
+            enemy.mode_timer = now
+        
+        if now - enemy.mode_timer > 4000:
+            enemy.shoot_mode = 1 - enemy.shoot_mode
+            enemy.mode_timer = now
+            enemy.last_shot = 0 
+
+        if enemy.shoot_mode == 0:
+            if now - enemy.last_shot > 150:
+                angle_offset = (now / 10) % 360
+                for i in range(8):
+                    angle = (i * 45) + angle_offset
+                    rad = math.radians(angle)
+                    enemy_bullets.append(EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, enemy.rect.centerx + math.cos(rad) * 100, enemy.rect.centery + math.sin(rad) * 100, 10))
+                enemy.last_shot = now
+                
+        elif enemy.shoot_mode == 1:
+            if now - enemy.last_shot > 800:
+                angle_to_player = math.atan2(player_pos[1] + 15 - enemy.rect.centery, player_pos[0] + 15 - enemy.rect.centerx)
+                for offset in [-0.2, -0.1, 0, 0.1, 0.2]:
+                    rad = angle_to_player + offset
+                    enemy_bullets.append(EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, enemy.rect.centerx + math.cos(rad) * 100, enemy.rect.centery + math.sin(rad) * 100, 10))
+                enemy.last_shot = now
+
+    elif enemy.behavior_type == "charger":
+        if not hasattr(enemy, 'vx'):
+            enemy.vx, enemy.vy = 0, 0
+            enemy.mode_timer = now
+            enemy.charging = False
+
+        p_center_x, p_center_y = player_pos[0] + 15, player_pos[1] + 15
+        e_center_x, e_center_y = enemy.rect.centerx, enemy.rect.centery
+        
+        if enemy.charging:
+            hit_wall = False
+            
+            if enemy.rect.left + enemy.vx < off_x or enemy.rect.right + enemy.vx > off_x + 640 or check_enemy_tile_collision(enemy.rect.move(enemy.vx, 0), layout): hit_wall = True
+            else: enemy.rect.x += enemy.vx
+            
+            if enemy.rect.top + enemy.vy < off_y or enemy.rect.bottom + enemy.vy > off_y + 640 or check_enemy_tile_collision(enemy.rect.move(0, enemy.vy), layout): hit_wall = True
+            else: enemy.rect.y += enemy.vy
+                
+            if hit_wall:
+                enemy.charging = False
+                enemy.vx, enemy.vy = 0, 0
+                enemy.mode_timer = now
+                
+        else:
+            aligned_x = abs(p_center_x - e_center_x) < 30
+            aligned_y = abs(p_center_y - e_center_y) < 30
+            
+            if aligned_x or aligned_y:
+                enemy.charging = True
+                charge_speed = enemy.speed * 2.0
+                if aligned_x: 
+                    enemy.vx = 0; enemy.vy = charge_speed * (1 if p_center_y > e_center_y else -1)
+                elif aligned_y: 
+                    enemy.vx = charge_speed * (1 if p_center_x > e_center_x else -1); enemy.vy = 0
+
+            else: 
+                if now - enemy.mode_timer > 1000:
+                    enemy.mode_timer = now; angle = random.uniform(0, 2 * math.pi)
+                    wander_speed = enemy.speed / 4 * 3.0
+                    enemy.vx = math.cos(angle) * wander_speed; enemy.vy = math.sin(angle) * wander_speed
+                
+                if enemy.rect.left + enemy.vx < off_x or enemy.rect.right + enemy.vx > off_x + 640 or check_enemy_tile_collision(enemy.rect.move(enemy.vx, 0), layout): enemy.vx *= -1
+                if enemy.rect.top + enemy.vy < off_y or enemy.rect.bottom + enemy.vy > off_y + 640 or check_enemy_tile_collision(enemy.rect.move(0, enemy.vy), layout): enemy.vy *= -1
+
+                enemy.rect.x += enemy.vx
+                enemy.rect.y += enemy.vy
+
 
     elif enemy.behavior_type == "turret":
         if now - enemy.last_shot > 1000:
@@ -131,23 +194,19 @@ def update_enemy_behavior(enemy, player_pos, layout, all_enemies, enemy_bullets)
             
     elif enemy.behavior_type == "burst_turret":
         if now - enemy.last_shot > 2000:
-            dx = (player_pos[0]+15) - enemy.rect.centerx
-            dy = (player_pos[1]+15) - enemy.rect.centery
-            dist = math.hypot(dx, dy)
+            dx = (player_pos[0]+15) - enemy.rect.centerx; dy = (player_pos[1]+15) - enemy.rect.centery; dist = math.hypot(dx, dy)
             if dist > 0:
                 vx, vy = (dx/dist)*80, (dy/dist)*80
                 new_rect = enemy.rect.move(vx, vy)
                 if not check_enemy_tile_collision(new_rect, layout): enemy.rect.move_ip(vx, vy)
             for a in [0, 45, 90, 135, 180, 225, 270, 315]:
-                rad = math.radians(a)
-                enemy_bullets.append(EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, enemy.rect.centerx + math.cos(rad)*100, enemy.rect.centery + math.sin(rad)*100, 10))
+                rad = math.radians(a); enemy_bullets.append(EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, enemy.rect.centerx + math.cos(rad)*100, enemy.rect.centery + math.sin(rad)*100, 10))
             enemy.last_shot = now
 
     elif enemy.behavior_type == "chase":
         if enemy.flying: target_px, target_py = player_pos[0], player_pos[1]
         else:
-            start = get_grid_pos(enemy.rect.centerx, enemy.rect.centery)
-            goal = get_grid_pos(player_pos[0]+15, player_pos[1]+15)
+            start = get_grid_pos(enemy.rect.centerx, enemy.rect.centery); goal = get_grid_pos(player_pos[0]+15, player_pos[1]+15)
             path = a_star(start, goal, layout)
             if not path: target_px, target_py = player_pos[0], player_pos[1]
             else:
@@ -163,25 +222,21 @@ def update_enemy_behavior(enemy, player_pos, layout, all_enemies, enemy_bullets)
             ny = enemy.rect.move(0, vy)
             if not any(other != enemy and ny.colliderect(other.rect) for other in all_enemies): enemy.rect.y += vy
 
+
 def handle_death(enemy, room_explosions, current_enemies_list, EnemyClass):
     if enemy.hp <= 0:
         from enemydata import ENEMY_TYPES
         data = ENEMY_TYPES[enemy.id]
         
-        # Logika wybuchu
         if data.get("death_type") == "explode":
             room_explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
             
-        # Logika podziału (Split)
         split_id = data.get("split_to")
         if split_id:
-            # Tworzymy dwóch nowych wrogów na pozycji zabitego
-            # Musimy wyliczyć x_grid, y_grid na podstawie pikseli
             off_x, off_y = (1280-640)//2, (720-640)//2
             gx = (enemy.rect.centerx - off_x) // 40
             gy = (enemy.rect.centery - off_y) // 40
-            e1 = EnemyClass(gx, gy, split_id)
-            e2 = EnemyClass(gx, gy, split_id)
+            e1 = EnemyClass(gx, gy, split_id); e2 = EnemyClass(gx, gy, split_id)
             current_enemies_list.extend([e1, e2])
 
         return True
