@@ -2,6 +2,7 @@
 import math
 import pygame
 import heapq
+import random
 
 class Explosion:
     def __init__(self, x, y):
@@ -49,8 +50,7 @@ class EnemyProjectile:
         self.x += self.vx
         self.y += self.vy
         self.traveled += self.speed
-        if self.traveled > self.max_range_px:
-            self.active = False
+        if self.traveled > self.max_range_px: self.active = False
 
     def draw(self, surface):
         rad = math.radians(self.angle)
@@ -63,6 +63,15 @@ class EnemyProjectile:
 def get_grid_pos(px, py):
     off_x, off_y = (1280-640)//2, (720-640)//2
     return int((px - off_x) // 40), int((py - off_y) // 40)
+
+def check_enemy_tile_collision(rect, layout):
+    off_x, off_y = (1280-640)//2, (720-640)//2
+    for y in range(16):
+        for x in range(16):
+            if layout[y][x] == 1:
+                tile_rect = pygame.Rect(off_x + x*40, off_y + y*40, 40, 40)
+                if rect.colliderect(tile_rect): return True
+    return False
 
 def h(a, b): return abs(a[0]-b[0]) + abs(a[1]-b[1])
 
@@ -88,11 +97,38 @@ def a_star(start, goal, layout):
 
 def update_enemy_behavior(enemy, player_pos, layout, all_enemies, enemy_bullets):
     now = pygame.time.get_ticks()
-    if enemy.behavior_type == "idle": return
+    
+    if enemy.behavior_type == "bounce":
+        # Inicjalizacja kierunku jeśli nie istnieje
+        if not hasattr(enemy, 'vx'):
+            angle = random.uniform(0, 2 * math.pi)
+            enemy.vx = math.cos(angle) * enemy.speed
+            enemy.vy = math.sin(angle) * enemy.speed
+
+        # Próba ruchu
+        new_rect = enemy.rect.move(enemy.vx, enemy.vy)
+        
+        # Odbijanie od ścian pokoju (640x640 wewnątrz offsetu)
+        off_x, off_y = (1280-640)//2, (720-640)//2
+        if new_rect.left < off_x or new_rect.right > off_x + 640:
+            enemy.vx *= -1
+        if new_rect.top < off_y or new_rect.bottom > off_y + 640:
+            enemy.vy *= -1
+            
+        # Odbijanie od kamieni
+        if check_enemy_tile_collision(new_rect, layout):
+            # Proste odbicie przy kolizji z kafelkiem
+            enemy.vx *= -1
+            enemy.vy *= -1
+
+        enemy.rect.x += enemy.vx
+        enemy.rect.y += enemy.vy
+
     elif enemy.behavior_type == "turret":
         if now - enemy.last_shot > 1000:
             enemy_bullets.append(EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, player_pos[0]+15, player_pos[1]+15, 10))
             enemy.last_shot = now
+            
     elif enemy.behavior_type == "burst_turret":
         if now - enemy.last_shot > 2000:
             dx = (player_pos[0]+15) - enemy.rect.centerx
@@ -100,13 +136,13 @@ def update_enemy_behavior(enemy, player_pos, layout, all_enemies, enemy_bullets)
             dist = math.hypot(dx, dy)
             if dist > 0:
                 vx, vy = (dx/dist)*80, (dy/dist)*80
-                enemy.rect.move_ip(vx, vy)
+                new_rect = enemy.rect.move(vx, vy)
+                if not check_enemy_tile_collision(new_rect, layout): enemy.rect.move_ip(vx, vy)
             for a in [0, 45, 90, 135, 180, 225, 270, 315]:
                 rad = math.radians(a)
-                tx = enemy.rect.centerx + math.cos(rad)*100
-                ty = enemy.rect.centery + math.sin(rad)*100
-                enemy_bullets.append(EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, tx, ty, 10))
+                enemy_bullets.append(EnemyProjectile(enemy.rect.centerx, enemy.rect.centery, enemy.rect.centerx + math.cos(rad)*100, enemy.rect.centery + math.sin(rad)*100, 10))
             enemy.last_shot = now
+
     elif enemy.behavior_type == "chase":
         if enemy.flying: target_px, target_py = player_pos[0], player_pos[1]
         else:
@@ -127,10 +163,26 @@ def update_enemy_behavior(enemy, player_pos, layout, all_enemies, enemy_bullets)
             ny = enemy.rect.move(0, vy)
             if not any(other != enemy and ny.colliderect(other.rect) for other in all_enemies): enemy.rect.y += vy
 
-def handle_death(enemy, room_explosions):
+def handle_death(enemy, room_explosions, current_enemies_list, EnemyClass):
     if enemy.hp <= 0:
         from enemydata import ENEMY_TYPES
-        if ENEMY_TYPES[enemy.id].get("death_type") == "explode":
+        data = ENEMY_TYPES[enemy.id]
+        
+        # Logika wybuchu
+        if data.get("death_type") == "explode":
             room_explosions.append(Explosion(enemy.rect.centerx, enemy.rect.centery))
+            
+        # Logika podziału (Split)
+        split_id = data.get("split_to")
+        if split_id:
+            # Tworzymy dwóch nowych wrogów na pozycji zabitego
+            # Musimy wyliczyć x_grid, y_grid na podstawie pikseli
+            off_x, off_y = (1280-640)//2, (720-640)//2
+            gx = (enemy.rect.centerx - off_x) // 40
+            gy = (enemy.rect.centery - off_y) // 40
+            e1 = EnemyClass(gx, gy, split_id)
+            e2 = EnemyClass(gx, gy, split_id)
+            current_enemies_list.extend([e1, e2])
+
         return True
     return False

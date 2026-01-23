@@ -4,6 +4,7 @@ import math
 
 from roomdata import ROOM_TEMPLATES
 from troomdata import TROOM_TEMPLATES
+from bossroomdata import BOSS_TEMPLATES # Nowy
 from items import ITEM_POOL, apply_item_stats
 from enemydata import ENEMY_TYPES
 from enemyai import update_enemy_behavior, handle_death, Explosion, EnemyProjectile
@@ -29,13 +30,11 @@ clock = pygame.time.Clock()
 menu_font = pygame.font.SysFont('Arial', 40, bold=True)
 stats_font = pygame.font.SysFont('Arial', 24, bold=True)
 item_display_font = pygame.font.SysFont('Arial', 36, bold=True)
-small_font = pygame.font.SysFont('Arial', 16)
 
-# --- STATYSTYKI GRACZA ---
+# --- STATYSTYKI ---
 p_stats = {
     "max_hp": 3, "hp": 3, "dmg": 5.0, "fr": 2.0, "range": 6.0, "speed": 6.0, 
-    "b_size_mult": 1.0, "inv_duration": 60, "temp_dmg": 0.0, "temp_dmg_timer": 0,
-    "pierce": 1
+    "b_size_mult": 1.0, "inv_duration": 60, "temp_dmg": 0.0, "temp_dmg_timer": 0, "pierce": 1
 }
 player_inv_timer = 0
 player_inventory = []
@@ -64,16 +63,14 @@ class Projectile:
         self.traveled = 0
         self.max_range_px = max_range * TILE_SIZE
         self.active = True
-        self.size = 12 * size_mult # Zwiększony hitbox Chubby
+        self.size = 12 * size_mult
         self.pierce = pierce
         self.hit_enemies = [] 
-
     def update(self):
         mx, my = self.dir[0] * self.speed, self.dir[1] * self.speed
         self.x += mx; self.y += my
         self.traveled += math.hypot(mx, my)
         if self.traveled > self.max_range_px: self.active = False
-
     def draw(self, surface):
         cx, cy = self.x, self.y
         s = self.size
@@ -95,7 +92,7 @@ class Enemy:
         py = ROOM_OFFSET_Y + y_grid*TILE_SIZE + (TILE_SIZE - self.size)//2
         self.rect = pygame.Rect(px, py, self.size, self.size)
 
-# --- FUNKCJE POMOCNICZE ---
+# --- POMOCNICZE ---
 
 def draw_text_with_outline(text, font, color, outline_color, x, y):
     text_surf = font.render(text, True, color)
@@ -124,7 +121,6 @@ def draw_item_icon(surface, x, y, item_id, color):
     elif item_id == "blessing":
         pygame.draw.rect(surface, color, (x-3, y-12, 6, 24)); pygame.draw.rect(surface, color, (x-12, y-3, 24, 6))
     elif item_id == "pierce":
-        # Ikona strzały
         pygame.draw.line(surface, color, (x-10, y), (x+10, y), 3)
         pygame.draw.polygon(surface, color, [(x+4, y-6), (x+12, y), (x+4, y+6)])
     else: pygame.draw.circle(surface, color, (x, y), 12)
@@ -133,11 +129,9 @@ def generate_map():
     grid = [[0 for _ in range(9)] for _ in range(9)]
     grid[4][4] = 4; rooms = [(4, 4)]
     for _ in range(6):
-        px, py = random.choice(rooms)
-        dx, dy = random.choice([(0,1),(0,-1),(1,0),(-1,0)])
+        px, py = random.choice(rooms); dx, dy = random.choice([(0,1),(0,-1),(1,0),(-1,0)])
         nx, ny = px+dx, py+dy
-        if 0 <= nx < 9 and 0 <= ny < 9 and grid[ny][nx] == 0:
-            grid[ny][nx] = 1; rooms.append((nx, ny))
+        if 0 <= nx < 9 and 0 <= ny < 9 and grid[ny][nx] == 0: grid[ny][nx] = 1; rooms.append((nx, ny))
     candidates = [(x,y) for y in range(9) for x in range(9) if grid[y][x] == 0 and sum(1 for dx,dy in [(0,1),(0,-1),(1,0),(-1,0)] if 0<=x+dx<9 and 0<=y+dy<9 and grid[y+dy][x+dx]!=0) == 1]
     random.shuffle(candidates)
     if len(candidates) >= 2: grid[candidates[0][1]][candidates[0][0]] = 2; grid[candidates[1][1]][candidates[1][0]] = 3
@@ -146,25 +140,23 @@ def generate_map():
         for x in range(9):
             rtype = grid[y][x]
             if rtype != 0:
-                enemies = []; room_items = []
+                enemies = []; items = []
                 if rtype == 1: layout = [row[:] for row in random.choice(ROOM_TEMPLATES)]
                 elif rtype == 2: layout = [row[:] for row in random.choice(TROOM_TEMPLATES)]
+                elif rtype == 3: layout = [row[:] for row in random.choice(BOSS_TEMPLATES)]
                 else: layout = [[0]*16 for _ in range(16)]
-                pedestal_slots = []
+                ped_slots = []
                 for ly in range(16):
                     for lx in range(16):
                         val = layout[ly][lx]
-                        if isinstance(val, str) and val in ENEMY_TYPES:
-                            enemies.append(Enemy(lx, ly, val)); layout[ly][lx] = 0
-                        elif val == 2 and rtype == 2: pedestal_slots.append((lx, ly))
-                if rtype == 2 and pedestal_slots:
-                    num = random.randint(1, min(2, len(pedestal_slots)))
-                    chosen = random.sample(pedestal_slots, num)
-                    for s in pedestal_slots:
+                        if isinstance(val, str) and val in ENEMY_TYPES: enemies.append(Enemy(lx, ly, val)); layout[ly][lx] = 0
+                        elif val == 2 and rtype == 2: ped_slots.append((lx, ly))
+                if rtype == 2 and ped_slots:
+                    chosen = random.sample(ped_slots, random.randint(1, min(2, len(ped_slots))))
+                    for s in ped_slots:
                         if s not in chosen: layout[s[1]][s[0]] = 0
-                    for s in chosen:
-                        room_items.append({"data": random.choice(ITEM_POOL).copy(), "gx": s[0], "gy": s[1]})
-                final_map[(x, y)] = {"type": rtype, "layout": layout, "enemies": enemies, "explosions": [], "enemy_bullets": [], "pickups": [], "items": room_items}
+                        else: items.append({"data": random.choice(ITEM_POOL).copy(), "gx": s[0], "gy": s[1]})
+                final_map[(x, y)] = {"type": rtype, "layout": layout, "enemies": enemies, "explosions": [], "enemy_bullets": [], "pickups": [], "items": items}
     return final_map
 
 def check_tile_collision(rect, layout):
@@ -181,37 +173,27 @@ def draw_ui():
         pygame.draw.circle(screen, RED if i < p_stats["hp"] else BLACK, pos, 12)
     stats_txt = [f"DMG: {round(p_stats['dmg']+p_stats['temp_dmg'], 1)}", f"FR: {round(p_stats['fr'], 1)}", f"RANGE: {round(p_stats['range'], 1)}", f"SPEED: {round(p_stats['speed'], 1)}"]
     for i, txt in enumerate(stats_txt): screen.blit(stats_font.render(txt, True, WHITE), (25, 80 + i * 30))
-    
-    # Inwentarz - 10 OSTATNICH itemów
     inv_x, inv_y = SCREEN_WIDTH - 140, 160
-    last_10_items = player_inventory[-10:]
-    for i, it in enumerate(last_10_items):
-        draw_item_icon(screen, inv_x + (i%2)*60 + 25, inv_y + (i//2)*60 + 20, it["id"], it["color"])
-    
+    for i, it in enumerate(player_inventory[-10:]): draw_item_icon(screen, inv_x + (i%2)*60 + 25, inv_y + (i//2)*60 + 20, it["id"], it["color"])
     global item_popup_timer
-    if item_popup_timer > 0:
-        draw_text_with_outline(current_item_name, item_display_font, WHITE, BLACK, SCREEN_WIDTH // 2, 50)
-        item_popup_timer -= 1
+    if item_popup_timer > 0: draw_text_with_outline(current_item_name, item_display_font, WHITE, BLACK, SCREEN_WIDTH // 2, 50); item_popup_timer -= 1
 
 def draw_room(room_data):
-    layout = room_data["layout"]
-    cleared = len(room_data["enemies"]) == 0
+    layout = room_data["layout"]; cleared = len(room_data["enemies"]) == 0
     door_color = BLUE if cleared else DARK_GRAY
     for y in range(16):
         for x in range(16):
             r = pygame.Rect(ROOM_OFFSET_X + x*40, ROOM_OFFSET_Y + y*40, 40, 40)
-            pygame.draw.rect(screen, (40, 40, 40), r)
-            pygame.draw.rect(screen, (30, 30, 30), r, 1)
+            pygame.draw.rect(screen, (40, 40, 40), r); pygame.draw.rect(screen, (30, 30, 30), r, 1)
             tile = layout[y][x]
             if tile == 1: pygame.draw.rect(screen, GRAY, r.inflate(-4, -4))
             elif tile == 2:
                 pygame.draw.rect(screen, (100, 100, 100), (r.x+3, r.y+28, 34, 10))
                 for it in room_data["items"]:
-                    if it["gx"] == x and it["gy"] == y:
-                        draw_item_icon(screen, r.centerx, r.centery - 5, it["data"]["id"], it["data"]["color"])
+                    if it["gx"] == x and it["gy"] == y: draw_item_icon(screen, r.centerx, r.centery - 5, it["data"]["id"], it["data"]["color"])
     if room_data["type"] == 3 and cleared:
-        trapdoor_rect = pygame.Rect(ROOM_OFFSET_X + 7*40, ROOM_OFFSET_Y + 7*40, 80, 80)
-        pygame.draw.rect(screen, BLACK, trapdoor_rect); pygame.draw.rect(screen, DARK_GRAY, trapdoor_rect, 4)
+        trap_r = pygame.Rect(ROOM_OFFSET_X + 7*40, ROOM_OFFSET_Y + 7*40, 80, 80)
+        pygame.draw.rect(screen, BLACK, trap_r); pygame.draw.rect(screen, DARK_GRAY, trap_r, 4)
     rx, ry = current_room
     for dx, dy, side in [(0,-1,"top"), (0,1,"bottom"), (-1,0,"left"), (1,0,"right")]:
         if (rx+dx, ry+dy) in game_map:
@@ -226,12 +208,12 @@ def draw_minimap():
     for (x,y), data in game_map.items():
         c = WHITE
         if data["type"] == 2: c = YELLOW
-        if data["type"] == 3: c = RED
-        if data["type"] == 4: c = (150, 150, 255)
+        elif data["type"] == 3: c = RED
+        elif data["type"] == 4: c = (150, 150, 255)
         if [x,y] == current_room: c = (0, 255, 0)
         pygame.draw.rect(screen, c, (ox+x*ms, oy+y*ms, ms-1, ms-1))
 
-# --- LOGIKA STARTU ---
+# --- START ---
 scene = 0; running = True; game_map = {}; current_room = [4, 4]
 player_x, player_y = 0.0, 0.0; player_bullets = []; last_shot_time = 0; player_size = 30
 btn_start = pygame.Rect(SCREEN_WIDTH//2-120, SCREEN_HEIGHT//2-80, 240, 60)
@@ -246,7 +228,7 @@ def start_new_game():
 
 def start_next_level():
     global game_map, current_room, player_x, player_y, player_bullets
-    random.seed(); game_map = generate_map(); current_room = [4, 4]
+    game_map = generate_map(); current_room = [4, 4]
     player_x, player_y = SCREEN_WIDTH//2-15, SCREEN_HEIGHT//2-15; player_bullets = []
 
 while running:
@@ -268,27 +250,22 @@ while running:
         pygame.draw.rect(screen, GREEN, btn_start, border_radius=12); pygame.draw.rect(screen, RED, btn_quit, border_radius=12)
         txt_s = menu_font.render("START", True, BLACK); txt_q = menu_font.render("QUIT", True, BLACK)
         screen.blit(txt_s, txt_s.get_rect(center=btn_start.center)); screen.blit(txt_q, txt_q.get_rect(center=btn_quit.center))
-
     elif scene == 1:
         if p_stats["temp_dmg_timer"] > 0:
             p_stats["temp_dmg_timer"] -= 1
             if p_stats["temp_dmg_timer"] <= 0: p_stats["temp_dmg"] = 0.0
-
         speed = (p_stats["speed"] * TILE_SIZE) / 60
         room = game_map[tuple(current_room)]; locked = len(room["enemies"]) > 0
         if player_inv_timer > 0: player_inv_timer -= 1
         
-        # Debug
         if keys[pygame.K_g] and keys[pygame.K_o] and keys[pygame.K_d]: p_stats.update({"max_hp": 10, "hp": 10, "dmg": 50.0, "speed": 12.0, "range": 16.0, "pierce": 10})
         if keys[pygame.K_p] and keys[pygame.K_o] and (keys[pygame.K_t] or keys[pygame.K_b]):
-            target = 2 if keys[pygame.K_t] else 3
+            tt = 2 if keys[pygame.K_t] else 3
             for co, da in game_map.items():
-                if da["type"] == target:
+                if da["type"] == tt:
                     for ty in range(16):
                         for tx in range(16):
-                            if da["layout"][ty][tx] == 0:
-                                current_room = list(co); player_x = ROOM_OFFSET_X+tx*40+5; player_y = ROOM_OFFSET_Y+ty*40+5
-                                player_bullets = []; room = game_map[tuple(current_room)]; break
+                            if da["layout"][ty][tx] == 0: current_room = list(co); player_x = ROOM_OFFSET_X+tx*40+5; player_y = ROOM_OFFSET_Y+ty*40+5; player_bullets = []; room = game_map[tuple(current_room)]; break
                         else: continue
                         break
                     break
@@ -299,23 +276,18 @@ while running:
         if keys[pygame.K_a]: dx -= speed
         if keys[pygame.K_d]: dx += speed
         p_rect = pygame.Rect(player_x, player_y, player_size, player_size)
-        
         nx_r = pygame.Rect(player_x + dx, player_y, player_size, player_size)
         if not check_tile_collision(nx_r, room["layout"]):
             if ROOM_OFFSET_X <= nx_r.x <= ROOM_OFFSET_X+640-player_size: player_x += dx
             elif 280 < (player_y-ROOM_OFFSET_Y) < 360 and not locked:
-                if nx_r.x < ROOM_OFFSET_X and (current_room[0]-1, current_room[1]) in game_map:
-                    current_room[0]-=1; player_x=ROOM_OFFSET_X+640-player_size; player_bullets=[]; room["enemy_bullets"]=[]
-                elif nx_r.x > ROOM_OFFSET_X+640-player_size and (current_room[0]+1, current_room[1]) in game_map:
-                    current_room[0]+=1; player_x=ROOM_OFFSET_X; player_bullets=[]; room["enemy_bullets"]=[]
+                if nx_r.x < ROOM_OFFSET_X and (current_room[0]-1, current_room[1]) in game_map: current_room[0]-=1; player_x=ROOM_OFFSET_X+640-player_size; player_bullets=[]; room["enemy_bullets"]=[]
+                elif nx_r.x > ROOM_OFFSET_X+640-player_size and (current_room[0]+1, current_room[1]) in game_map: current_room[0]+=1; player_x=ROOM_OFFSET_X; player_bullets=[]; room["enemy_bullets"]=[]
         ny_r = pygame.Rect(player_x, player_y + dy, player_size, player_size)
         if not check_tile_collision(ny_r, room["layout"]):
             if ROOM_OFFSET_Y <= ny_r.y <= ROOM_OFFSET_Y+640-player_size: player_y += dy
             elif 280 < (player_x-ROOM_OFFSET_X) < 360 and not locked:
-                if ny_r.y < ROOM_OFFSET_Y and (current_room[0], current_room[1]-1) in game_map:
-                    current_room[1]-=1; player_y=ROOM_OFFSET_Y+640-player_size; player_bullets=[]; room["enemy_bullets"]=[]
-                elif ny_r.y > ROOM_OFFSET_Y+640-player_size and (current_room[0], current_room[1]+1) in game_map:
-                    current_room[1]+=1; player_y=ROOM_OFFSET_Y; player_bullets=[]; room["enemy_bullets"]=[]
+                if ny_r.y < ROOM_OFFSET_Y and (current_room[0], current_room[1]-1) in game_map: current_room[1]-=1; player_y=ROOM_OFFSET_Y+640-player_size; player_bullets=[]; room["enemy_bullets"]=[]
+                elif ny_r.y > ROOM_OFFSET_Y+640-player_size and (current_room[0], current_room[1]+1) in game_map: current_room[1]+=1; player_y=ROOM_OFFSET_Y; player_bullets=[]; room["enemy_bullets"]=[]
 
         if room["type"] == 3 and not locked and p_rect.colliderect(pygame.Rect(ROOM_OFFSET_X+7*40, ROOM_OFFSET_Y+7*40, 80, 80)): start_next_level()
 
@@ -325,8 +297,7 @@ while running:
         elif keys[pygame.K_LEFT]: s_dir = (-1, 0)
         elif keys[pygame.K_RIGHT]: s_dir = (1, 0)
         if s_dir and now - last_shot_time > 1000/p_stats["fr"]:
-            total_dmg = p_stats["dmg"] + p_stats["temp_dmg"]
-            player_bullets.append(Projectile(player_x+15, player_y+15, s_dir, total_dmg, p_stats["range"], p_stats["b_size_mult"], p_stats["pierce"]))
+            player_bullets.append(Projectile(player_x+15, player_y+15, s_dir, p_stats["dmg"]+p_stats["temp_dmg"], p_stats["range"], p_stats["b_size_mult"], p_stats["pierce"]))
             last_shot_time = now
 
         for b in player_bullets[:]:
@@ -334,10 +305,9 @@ while running:
             if not (ROOM_OFFSET_X < b.x < ROOM_OFFSET_X+640 and ROOM_OFFSET_Y < b.y < ROOM_OFFSET_Y+640): b.active=False
             gx, gy = int((b.x-ROOM_OFFSET_X)//40), int((b.y-ROOM_OFFSET_Y)//40)
             if 0<=gx<16 and 0<=gy<16 and room["layout"][gy][gx]==1: b.active=False
-            # Pierce Hitbox Check
-            b_hitbox = pygame.Rect(b.x - b.size/2, b.y - b.size/2, b.size, b.size)
+            b_h = pygame.Rect(b.x - b.size/2, b.y - b.size/2, b.size, b.size)
             for e in room["enemies"]:
-                if b_hitbox.colliderect(e.rect) and e not in b.hit_enemies:
+                if b_h.colliderect(e.rect) and e not in b.hit_enemies:
                     e.hp -= b.dmg; b.hit_enemies.append(e); b.pierce -= 1
                     if b.pierce <= 0: b.active = False
             if not b.active: player_bullets.remove(b)
@@ -352,42 +322,34 @@ while running:
             if not eb.active: room["enemy_bullets"].remove(eb)
 
         for it in room["items"][:]:
-            if p_rect.colliderect(pygame.Rect(ROOM_OFFSET_X + it["gx"]*40, ROOM_OFFSET_Y + it["gy"]*40, 40, 40)):
-                p_stats = apply_item_stats(p_stats, it["data"]); player_inventory.append(it["data"])
-                current_item_name = it["data"]["name"]; item_popup_timer = 120; room["items"].remove(it)
-
+            if p_rect.colliderect(pygame.Rect(ROOM_OFFSET_X+it["gx"]*40, ROOM_OFFSET_Y+it["gy"]*40, 40, 40)):
+                p_stats = apply_item_stats(p_stats, it["data"]); player_inventory.append(it["data"]); current_item_name = it["data"]["name"]; item_popup_timer = 120; room["items"].remove(it)
         for p in room["pickups"][:]:
             if math.hypot(p.x - p_rect.centerx, p.y - p_rect.centery) < 25:
                 if p_stats["hp"] < p_stats["max_hp"]: p_stats["hp"] += 1; room["pickups"].remove(p)
-
         for ex in room["explosions"][:]:
-            if ex.update(p_rect, room["enemies"]) and player_inv_timer == 0:
-                p_stats["hp"] -= 1; player_inv_timer = p_stats["inv_duration"]
+            if ex.update(p_rect, room["enemies"]) and player_inv_timer == 0: p_stats["hp"] -= 1; player_inv_timer = p_stats["inv_duration"]
             if not ex.active: room["explosions"].remove(ex)
         for e in room["enemies"]:
             update_enemy_behavior(e, (player_x, player_y), room["layout"], room["enemies"], room["enemy_bullets"])
-            if player_inv_timer == 0 and p_rect.colliderect(e.rect):
-                p_stats["hp"] -= 1; player_inv_timer = p_stats["inv_duration"]
+            if player_inv_timer == 0 and p_rect.colliderect(e.rect): p_stats["hp"] -= 1; player_inv_timer = p_stats["inv_duration"]
         
         for e in room["enemies"][:]:
-            if handle_death(e, room["explosions"]):
+            if handle_death(e, room["explosions"], room["enemies"], Enemy):
                 if any(it["id"] == "blood_lust" for it in player_inventory): p_stats["temp_dmg"] = 4.0; p_stats["temp_dmg_timer"] = 240
                 if random.random() < 0.05: room["pickups"].append(Pickup(e.rect.centerx, e.rect.centery, "heart"))
                 room["enemies"].remove(e)
 
         if p_stats["hp"] <= 0: scene = 0
-
         screen.fill(BLACK); draw_room(room)
         for p in room["pickups"]: p.draw(screen)
         for b in player_bullets: b.draw(screen)
         for e in room["enemies"]:
             pygame.draw.rect(screen, e.color, e.rect)
-            pygame.draw.rect(screen, RED, (e.rect.x, e.rect.y-8, e.rect.width, 4))
-            pygame.draw.rect(screen, GREEN, (e.rect.x, e.rect.y-8, (max(0, e.hp)/e.max_hp)*e.rect.width, 4))
+            pygame.draw.rect(screen, RED, (e.rect.x, e.rect.y-8, e.rect.width, 4)); pygame.draw.rect(screen, GREEN, (e.rect.x, e.rect.y-8, (max(0, e.hp)/e.max_hp)*e.rect.width, 4))
         if player_inv_timer % 10 < 5: pygame.draw.rect(screen, (0, 200, 255), (player_x, player_y, 30, 30))
         for ex in room["explosions"]: ex.draw(screen)
         for eb in room["enemy_bullets"]: eb.draw(screen)
         draw_ui(); draw_minimap()
-
     pygame.display.flip()
 pygame.quit()
